@@ -6,6 +6,9 @@ import java.nio.file.attribute.BasicFileAttributes;
 
 public class RecursiveWalk {
 
+    private static final int BLOCK_SIZE = 1024;
+    private static byte[] array = new byte[BLOCK_SIZE];
+
     public static void main(String[] args) {
         if (args != null && args.length == 2 && args[0] != null && args[1] != null) {
             runHashFiles(args[0], args[1]);
@@ -23,10 +26,18 @@ public class RecursiveWalk {
              BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(fileToWrite), "UTF-8"))) {
             String text;
             while ((text = reader.readLine()) != null) {
+                try {
                     recursiveWalk(text, writer);
+                } catch (IOException e) {
+                    System.err.println(e.getMessage());
+                }
             }
+        } catch (FileNotFoundException e) {
+            System.err.println("Can't open input/output file: " + e.getMessage());
+        } catch (UnsupportedEncodingException e) {
+            System.err.println("Unsupported encoding of file " + e.getMessage());
         } catch (IOException e) {
-            System.err.println(e.getMessage());
+            System.err.println("Error while reading file" + e.getMessage());
         }
     }
 
@@ -38,16 +49,7 @@ public class RecursiveWalk {
             Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    int hash = 0;
-
-                    try {
-                        hash = hashFile(file.toString());
-                    } catch (IOException e) {
-                        System.err.println(e.getMessage());
-                    }
-
-                    writer.write(String.format("%08x", hash) + " " + file.toString());
-                    writer.newLine();
+                    checkFile(file.toString(), writer);
 
                     return super.visitFile(file, attrs);
                 }
@@ -60,28 +62,35 @@ public class RecursiveWalk {
                 }
             });
         } else {
-            int hash = 0;
-
-            try {
-                hash = hashFile(filename);
-            } catch (IOException e) {
-                System.err.println(e.getMessage());
-            }
-
-            writer.write(String.format("%08x", hash) + " " + filename);
-            writer.newLine();
+            checkFile(filename, writer);
         }
+    }
+
+    public static void checkFile(final String filename, final BufferedWriter writer) throws IOException{
+        int hash = 0;
+
+        try {
+            hash = hashFile(filename);
+        } catch (IOException e) {
+            System.err.println("Error reading file: " + e.getMessage());
+        }
+
+        writer.write(String.format("%08x", hash) + " " + filename);
+        writer.newLine();
+
     }
 
     public static int hashFile(String filename) throws IOException {
         FileInputStream is = new FileInputStream(new File(filename));
         int hash = 0x811c9dc5;
         int prime = 0x01000193;
-        int b;
+        int readedBytes;
 
-        while ((b = is.read()) != -1) {
-            hash *= prime;
-            hash ^= (b & 0xff);
+        while ((readedBytes = is.read(array, 0, BLOCK_SIZE)) != -1) {
+            for (int i = 0; i < readedBytes; i++) {
+                hash *= prime;
+                hash ^= (array[i] & 0xff);
+            }
         }
 
         return hash;
