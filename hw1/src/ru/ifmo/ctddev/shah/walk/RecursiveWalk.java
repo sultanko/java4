@@ -7,7 +7,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 public class RecursiveWalk {
 
     private static final int BLOCK_SIZE = 1024;
-    private static byte[] array = new byte[BLOCK_SIZE];
+    private static byte[] array = null;
 
     public static void main(String[] args) {
         if (args != null && args.length == 2 && args[0] != null && args[1] != null) {
@@ -19,17 +19,16 @@ public class RecursiveWalk {
 
     public static void runHashFiles(String nameToRead, String nameToWrite) {
 
-        File fileToRead = new File(nameToRead);
-        File fileToWrite = new File(nameToWrite);
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(fileToRead), "UTF-8"));
-             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(fileToWrite), "UTF-8"))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(new File(nameToRead)), "UTF-8"));
+             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(new File(nameToWrite)), "UTF-8"))) {
             String text;
+            array = new byte[BLOCK_SIZE];
             while ((text = reader.readLine()) != null) {
                 try {
                     recursiveWalk(text, writer);
                 } catch (IOException e) {
-                    System.err.println(e.getMessage());
+                    System.err.println("Error while walking: " + e.getMessage());
                 }
             }
         } catch (FileNotFoundException e) {
@@ -38,6 +37,8 @@ public class RecursiveWalk {
             System.err.println("Unsupported encoding of file " + e.getMessage());
         } catch (IOException e) {
             System.err.println("Error while reading file" + e.getMessage());
+        } finally {
+            array = null;
         }
     }
 
