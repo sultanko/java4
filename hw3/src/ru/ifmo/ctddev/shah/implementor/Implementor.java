@@ -16,7 +16,7 @@ public class Implementor implements Impler {
 
     private HashMap<String, Method> methods = new HashMap<>();
 
-    public static void main(String[] args) {
+    public static void main(final String[] args) {
         if (args != null && args.length == 1 && args[0] != null) {
             try {
                 getInstance().implement(Class.forName(args[0]), new File("/home/sultan/Documents/Year2/java/hw3/src"));
@@ -135,18 +135,20 @@ public class Implementor implements Impler {
             int modifiers = method.getModifiers();
             if (Modifier.isProtected(modifiers) || Modifier.isPublic(modifiers)) {
                 if (addAbstract && Modifier.isAbstract(modifiers)) {
-                    methods.put(getSimpleMethodName(method), method);
+                    methods.put(getMethodSignature(method), method);
                 } else if (!addAbstract && !Modifier.isAbstract(modifiers)) {
-                    String strMethod = getSimpleMethodName(method);
-                    if (methods.containsKey(getSimpleMethodName(method))) {
-                        methods.remove(strMethod);
+                    final String methodSignature = getMethodSignature(method);
+                    if (methods.containsKey(methodSignature)
+                            && (methods.get(methodSignature).getDeclaringClass()
+                                .isAssignableFrom(method.getDeclaringClass()))) {
+                            methods.remove(methodSignature);
                     }
                 }
             }
         }
     }
 
-    private String getSimpleMethodName(final Method method) {
+    private String getMethodSignature(final Method method) {
         return method.getName() + getParametrsImplementation(method.getParameters(), false);
     }
 
@@ -245,10 +247,6 @@ public class Implementor implements Impler {
     public void implement(final Class<?> token, final File root) throws ImplerException {
         try {
             writeImplementation(token, root);
-        } catch (ImplerException e) {
-            throw  e;
-        } catch (Exception e) {
-            throw new ImplerException(e.getMessage(), e.getCause());
         } finally {
             methods.clear();
         }

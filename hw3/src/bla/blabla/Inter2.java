@@ -8,5 +8,7 @@ import java.io.IOException;
  */
 public interface Inter2 {
 
-    public void exceptionTest() throws FileNotFoundException;
+    public void exceptionTest() throws IOException;
+
+    public default void one() {};
 }
