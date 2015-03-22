@@ -13,5 +13,9 @@ public abstract class BaseOfBase {
 
     public abstract Socket setNet(InputStream is);
 
+    public int rewrited() {
+        return 0;
+    }
+
     public abstract Double getCalced();
 }

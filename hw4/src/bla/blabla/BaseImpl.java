@@ -15,6 +15,11 @@ return null;
 }
 
 @Override
+public int rewrited()  {
+return 0;
+}
+
+@Override
 public java.net.Socket setNet(java.io.InputStream arg0)  {
 return null;
 }
@@ -41,6 +46,11 @@ return null;
 
 @Override
 public void test3()  throws java.lang.IllegalArgumentException, java.io.FileNotFoundException {
+}
+
+@Override
+public int hashCode()  {
+return 0;
 }
 
 @Override

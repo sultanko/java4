@@ -1,0 +1,1 @@
+javadoc -linkoffline http://docs.oracle.com/javase/7/docs/api/ http://docs.oracle.com/javase/7/docs/api/ -private -d documentation/ src/ru/ifmo/ctddev/shah/concurrent/*.java src/info/kgeorgiy/java/advanced/concurrent/*.java

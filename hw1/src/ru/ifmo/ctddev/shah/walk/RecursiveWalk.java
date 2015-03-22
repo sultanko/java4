@@ -85,10 +85,10 @@ public class RecursiveWalk {
         FileInputStream is = new FileInputStream(new File(filename));
         int hash = 0x811c9dc5;
         int prime = 0x01000193;
-        int readedBytes;
+        int readBytes;
 
-        while ((readedBytes = is.read(array, 0, BLOCK_SIZE)) != -1) {
-            for (int i = 0; i < readedBytes; i++) {
+        while ((readBytes = is.read(array, 0, BLOCK_SIZE)) != -1) {
+            for (int i = 0; i < readBytes; i++) {
                 hash *= prime;
                 hash ^= (array[i] & 0xff);
             }

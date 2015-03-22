@@ -14,8 +14,20 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 
+/**
+ * Class implements {@link info.kgeorgiy.java.advanced.implementor.JarImpler}.
+ * <p></p>
+ * Class extends classes and interfaces.
+ * Call {@link #implement(Class, java.io.File)} will produce java file in directory
+ * Calling {@link #implementJar(Class, java.io.File)} will produce jar file with implementation
+ * Can used by command line(more in {@link #main(String[])}).
+ * @author Egor Shah
+ */
 public class Implementor implements JarImpler {
 
+    /**
+     * Store methods avaible for implementation.
+     */
     private Map<String, MethodOnSteroids> methods = new HashMap<>();
 
     @Override
@@ -40,7 +52,8 @@ public class Implementor implements JarImpler {
 
     /**
      * Create new jar file in specific directory.
-     * Create and add in jar file implFile.class.
+     * Create new jar file on path <code>jarFile</code>. Add a new entry representing
+     * class file <code>implFile</code>.
      * @param jarFile name of jar file
      * @param root working directory
      * @param relativePath entry for jar
@@ -51,18 +64,17 @@ public class Implementor implements JarImpler {
     private void createJar(File jarFile, File root, String relativePath, File implFile) throws ImplerException {
         Manifest manifest = new Manifest();
         manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
-        try (JarOutputStream jout = new JarOutputStream(new FileOutputStream(jarFile), manifest)) {
-            String compiledClassName = root.getPath() + File.separator + relativePath + ".class";
-            JarEntry entry = new JarEntry(relativePath + ".class");
+        final String compiledClassName = root.getPath() + File.separator + relativePath + ".class";
+        try (JarOutputStream jout = new JarOutputStream(new FileOutputStream(jarFile), manifest);
+            InputStream in = new BufferedInputStream(new FileInputStream(compiledClassName))) {
+            final JarEntry entry = new JarEntry(relativePath + ".class");
             entry.setTime(implFile.lastModified());
             jout.putNextEntry(entry);
-            InputStream in = new BufferedInputStream(new FileInputStream(compiledClassName));
             byte[] buffer = new byte[1024];
             int count = 0;
             while ((count = in.read(buffer)) > 0) {
                 jout.write(buffer, 0, count);
             }
-            in.close();
             jout.closeEntry();
         } catch (IOException e) {
             throw new ImplerException(e.getMessage(), e.getCause());
@@ -70,13 +82,13 @@ public class Implementor implements JarImpler {
     }
 
     /**
-     * Compile java file in directory.
+     * Compile java file in <code>root </code>directory.
      * @param root working directory
      * @param implFile file to compile
      * @throws ImplerException when cannot compile file
      */
     private void compileFile(File root, File implFile) throws ImplerException {
-        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        final JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         final List<String> args = new ArrayList<>();
         args.add(implFile.getAbsolutePath());
         args.add("-cp");
@@ -90,11 +102,11 @@ public class Implementor implements JarImpler {
     @Override
     public void implement(final Class<?> token, final File root) throws ImplerException {
         try {
-            StringBuilder classImplementation = getClassImplementation(token);
-            File newRoot = createDirs(token.getPackage(), root);
-            File implFile = new File(newRoot.getPath() + File.separator + token.getSimpleName() + "Impl" + ".java");
+            final String classImplementation = getClassImplementation(token);
+            final File newRoot = createDirs(token.getPackage(), root);
+            final File implFile = new File(newRoot.getPath() + File.separator + token.getSimpleName() + "Impl" + ".java");
             try (BufferedWriter fileOut = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(implFile), "UTF-8"))) {
-                fileOut.write(classImplementation.toString());
+                fileOut.write(classImplementation);
             } catch (IOException e) {
                 throw new ImplerException("Error during writing file", e.getCause());
             }
@@ -120,12 +132,21 @@ public class Implementor implements JarImpler {
         return 0;
     }
 
+    /**
+     * Implement class from arguments.
+     * If first argument equals "-jar" then call {@link #implementJar(Class, File)}
+     * else call {@link #implement(Class, File)}.
+     * <p> ImplementJar usage: -jar className fileName.jar </p>
+     * <p>Implement usage: className workingDirectory </p>
+     * @param args command line arguments
+     */
     public static void main(final String[] args) {
         if (checkUsage(args) == 0) {
             try {
                 if (args[0].equals("-jar")) {
                     getInstance().implementJar(Class.forName(args[1]), new File(args[2]));
                 } else {
+                    File root = new File(args[1]);
                     getInstance().implement(Class.forName(args[0]), new File(args[1]));
                 }
             } catch (ImplerException | ClassNotFoundException e) {
@@ -134,6 +155,12 @@ public class Implementor implements JarImpler {
         } else {
             System.err.println("Invalid usage");
         }
+    }
+
+    /**
+     * Create a Implementor object.
+     */
+    public Implementor() {
     }
 
     /**
@@ -148,7 +175,7 @@ public class Implementor implements JarImpler {
      * Create directories for package.
      * @param pack class package
      * @param root working directory
-     * @return directory for this package
+     * @return File of directory for this package
      * @throws ImplerException when cannot create directories
      */
     private File createDirs(final Package pack, final File root) throws ImplerException {
@@ -171,7 +198,7 @@ public class Implementor implements JarImpler {
      * @return implementation of class
      * @throws ImplerException when implementation cannot be generated
      */
-    private StringBuilder getClassImplementation(final Class<?> loadedClass) throws ImplerException {
+    private String getClassImplementation(final Class<?> loadedClass) throws ImplerException {
         if (loadedClass.isPrimitive() || Modifier.isFinal(loadedClass.getModifiers())) {
             throw new ImplerException("Cannot implement "
                     + (loadedClass.isPrimitive() ? "primitive" : "final") + " class");
@@ -198,26 +225,13 @@ public class Implementor implements JarImpler {
 
         writer.append("}");
         writer.append("\n");
-        return writer;
+        return writer.toString();
 
-    }
-
-    /**
-     * Generate implementation for all class methods.
-     * @param loadedClass implemented class
-     * @param writer where implementation is written
-     */
-    private void implementMethods(final Class<?> loadedClass, final StringBuilder writer) {
-        loadAllMethods(loadedClass, true);
-        loadAllMethods(loadedClass, false);
-        for (Map.Entry<String, MethodOnSteroids> item : methods.entrySet()) {
-                writer.append(getMethodImplementation(item.getValue()));
-        }
     }
 
     /**
      * Generate implementation of constructors.
-     * Generate all possible constructors matching super.
+     * Generate all possible public and protected constructors matching super class.
      * @param clazz implemented class
      * @param implClazzName generated class name
      * @param writer where implemetation is written
@@ -255,7 +269,7 @@ public class Implementor implements JarImpler {
     /**
      * Implement all annnotations.
      * @param annotations array of annotations
-     * @param isOverrided flag of add override
+     * @param isOverrided if true add override annotation.
      * @return annotation implementation
      */
     private String getAnnotationsImplementation(final Annotation[] annotations, final boolean isOverrided) {
@@ -270,12 +284,26 @@ public class Implementor implements JarImpler {
     }
 
     /**
+     * Generate implementation for all class methods.
+     * @param loadedClass implemented class
+     * @param writer where implementation is written
+     */
+    private void implementMethods(final Class<?> loadedClass, final StringBuilder writer) {
+        loadAllMethods(loadedClass, true);
+        loadAllMethods(loadedClass, false);
+        for (Map.Entry<String, MethodOnSteroids> item : methods.entrySet()) {
+            writer.append(getMethodImplementation(item.getValue()));
+        }
+    }
+
+    /**
      * Searches all methods suitable for options.
-     * Method browse all method in class and
-     * super classes and interfaces and
-     * add/remove methods in map.
+     * Method browse all methods in class and his
+     * super classes and interfaces.
+     * If addAbstract is true then call {@link #addMethod(java.lang.reflect.Method) addMethod}
+     * else call {@link #removeMethod(java.lang.reflect.Method)} on method.
      * @param clazz class for search
-     * @param addAbstract add abstract methods or remove
+     * @param addAbstract if addAbstract is true add methods; remove otherwise.
      */
     private void loadAllMethods(final Class<?> clazz, final boolean addAbstract) {
         if (clazz == null) {
@@ -296,9 +324,10 @@ public class Implementor implements JarImpler {
     }
 
     /**
-     * Remove method from map.
-     * If method with same signature was added before
-     * then removing it from map.
+     * Remove method from map if exists.
+     * If method with same signature was added before to map
+     * and current method isn't abstract
+     * then removing old method from map.
      * @param method Method
      */
     private void removeMethod(Method method) {
@@ -318,8 +347,8 @@ public class Implementor implements JarImpler {
 
     /**
      * Add method if it is abstract.
-     * If method was added than exceptions and
-     * visible modifiers are merged with new method.
+     * If method was added before than exceptions and
+     * access modifiers are merged with current method.
      * @param method method
      */
     private void addMethod(Method method) {
@@ -345,7 +374,7 @@ public class Implementor implements JarImpler {
     }
 
     /**
-     * Return method signature without class name.
+     * Returns simple method signature.
      * @param method method
      * @return method signature
      */
@@ -374,7 +403,7 @@ public class Implementor implements JarImpler {
     }
 
     /**
-     * Get implementation of method with specific modifiers.
+     * Returns implementation of method with specific modifiers.
      * @param steroids method with modifiers
      * @return a method implementation
      */
@@ -404,7 +433,7 @@ public class Implementor implements JarImpler {
     }
 
     /**
-     * Return string representing array of parametrs.
+     * Returns string representing array of parametrs.
      * If boolean parametr is true then generate string without type of paramets;
      * and within type otherwise.
      * @param parameters parametrs for implement
@@ -453,6 +482,7 @@ public class Implementor implements JarImpler {
      * @param clazz return type
      * @return default value for this type
      * @throws java.lang.IllegalArgumentException if clss isn't primitive
+     * @see #getReturnValueImplementation(Class)
      */
     private static String getDefaultValue(final Class clazz) {
         if (clazz.equals(boolean.class)) {
@@ -477,6 +507,11 @@ public class Implementor implements JarImpler {
         }
     }
 
+    /**
+     * Save additional information of method.
+     * Class store exceptions and access modifiers of
+     * method signature.
+     */
     private class MethodOnSteroids {
         private Method method;
         private int methodModifiers;
@@ -488,22 +523,44 @@ public class Implementor implements JarImpler {
             this.methodExceptions = method.getExceptionTypes();
         }
 
+        /**
+         * Returns method
+         * @return object Method
+         */
         public Method getMethod() {
             return method;
         }
 
+        /**
+         * Returns stored modifiers of method
+         * @return int modifiers
+         */
         public int getMethodModifiers() {
             return methodModifiers;
         }
 
+        /**
+         * Returns stored exceptions of method
+         * @return array of exceptions
+         */
         public Class<?>[] getMethodExceptions() {
             return methodExceptions;
         }
 
+        /**
+         * Set method modifiers
+         * @param methodModifiers modifiers of method with same signature
+         */
         public void setMethodModifiers(int methodModifiers) {
             this.methodModifiers = methodModifiers;
         }
 
+        /**
+         * Set exceptions of method.
+         * If methodException is null then exceptions setted as array of lenght 0;
+         * otherwise just set this exceptions.
+         * @param methodExceptions exception of method with same signature
+         */
         public void setMethodExceptions(Class<?>[] methodExceptions) {
             if (methodExceptions == null) {
                 this.methodExceptions = new Class<?>[0];

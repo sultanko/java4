@@ -18,10 +18,13 @@ public abstract class Base extends BaseOfBase implements Inter, Inter2 {
     public abstract char getOpenFile(File file);
     public abstract double calc(int i1, int i2);
     public abstract Float manyArgs(Integer[]... integers);
+    public abstract int hashCode();
 
     public Double getCalced() {
         return 0.0;
     }
+
+    public abstract int rewrited();
 
     public abstract class MMMM {
         public abstract void gets();
