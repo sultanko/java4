@@ -7,28 +7,22 @@ import java.util.function.Function;
  */
 public class Task<T, R> {
 
-    private Function<? super T, ? extends R> function;
-    private T arg;
+    private final Function<? super T, ? extends R> function;
+    private final T arg;
+    private volatile R result = null;
 
     public Task(Function<? super T, ? extends R> function, T arg) {
         this.function = function;
         this.arg = arg;
     }
 
-    public void setFunction(Function<? super T, ? extends R> function) {
-        this.function = function;
+    public synchronized R getResult() {
+        return result;
     }
 
-    public T getArg() {
-        return arg;
+    public synchronized void calculateResult() {
+        result = function.apply(arg);
+        notify();
     }
 
-    public void setArg(T arg) {
-        this.arg = arg;
-    }
-
-    public Function<? super T, ? extends R> getFunction() {
-
-        return function;
-    }
 }

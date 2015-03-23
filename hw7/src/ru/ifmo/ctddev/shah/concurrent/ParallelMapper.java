@@ -1,4 +1,4 @@
-package info.kgeorgiy.java.advanced.concurrent;
+package ru.ifmo.ctddev.shah.concurrent;
 
 import java.util.List;
 import java.util.function.Function;

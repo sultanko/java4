@@ -1,7 +1,6 @@
 package ru.ifmo.ctddev.shah.concurrent;
 
 import info.kgeorgiy.java.advanced.concurrent.ListIP;
-import info.kgeorgiy.java.advanced.concurrent.ParallelMapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -21,7 +20,16 @@ import java.util.stream.Collectors;
  */
 public class IterativeParallelism implements ListIP {
 
-    private ParallelMapper mapper;
+
+    private ParallelMapper mapper = null;
+
+    public IterativeParallelism() {
+        mapper = new ParralelMapperImpl(20);
+    }
+
+    public IterativeParallelism(ParallelMapper mapper) {
+        this.mapper = mapper;
+    }
 
     /**
      * Returns maximum element in <code>values</code>.
@@ -143,36 +151,40 @@ public class IterativeParallelism implements ListIP {
         );
     }
 
+    @SuppressWarnings("unchecked")
     private  <T, R> List<R> getPartitionsResult(final int threadsCount, final List<? extends T> values, final Function<List<? extends T>, R> func) throws InterruptedException {
-        final List<Thread> threads = new ArrayList<>();
         final int partSize = threadsCount <= values.size() ?
                 values.size() / threadsCount : 1;
         final int resultSize = threadsCount <= values.size() ? threadsCount : values.size();
-        final R[] threadResult = (R[]) new Object[resultSize];
         List<List<? extends T>> args = new ArrayList<>();
         for (int i = 0; i < resultSize; i++)
         {
             final int left = partSize * i;
             final int right = (i == threadsCount - 1) ? values.size() : (partSize * (i + 1));
-            final int insertedNum = threads.size();
             args.add(values.subList(left, right));
-//            threads.add(new Thread(new Runnable() {
-//                @Override
-//                public void run() {
-//                    threadResult[insertedNum] = func.apply(values.subList(left, right));
-//                }
-//            }));
-//            threads.get(insertedNum).start();
         }
 
-//        for (Thread thread : threads) {
-//            thread.join();
-//        }
+        if (mapper != null) {
+            return mapper.run(func, args);
+        } else {
+            final List<Thread> threads = new ArrayList<>();
+            final R[] threadResult = (R[]) new Object[resultSize];
+            for (int i = 0; i < args.size(); i++) {
+                final int insertedNum = i;
+                threads.add(new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        threadResult[insertedNum] = func.apply(args.get(insertedNum));
+                    }
+                }));
+                threads.get(insertedNum).start();
+            }
+            for (Thread thread : threads) {
+                thread.join();
+            }
 
-        mapper = new ParralelMapperImpl(threadsCount);
-
-//        return Arrays.asList(threadResult);
-        return mapper.run(func, args);
+            return Arrays.asList(threadResult);
+        }
     }
 
     private  <T, R> R getResult(int threadsCount, final List<? extends T> values, Function<List<? extends T>, R> func, Function<List<? extends R>, R> funcConcat) throws InterruptedException {
