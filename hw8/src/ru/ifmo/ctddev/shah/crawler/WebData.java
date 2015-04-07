@@ -7,9 +7,11 @@ import java.net.MalformedURLException;
 import java.util.concurrent.*;
 
 /**
- * Created by sultan on 06.04.15.
+ * Created on 06.04.15.
+ * Support class for {@link WebCrawler}.
+ @author sultan
  */
-public class WebData {
+class WebData {
     public final Downloader downloader;
     public final int downloaders;
     public final int extractors;
