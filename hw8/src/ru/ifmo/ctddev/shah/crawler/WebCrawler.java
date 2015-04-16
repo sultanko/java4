@@ -34,7 +34,7 @@ public class WebCrawler implements Crawler {
     @Override
     public List<String> download(String url, int depth) throws IOException {
         WebTask webTask = new WebTask(webData, url, depth);
-        return webTask.download();
+        return webTask.download(url, depth);
     }
 
     /**

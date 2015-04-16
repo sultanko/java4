@@ -4,9 +4,7 @@ import info.kgeorgiy.java.advanced.crawler.Document;
 import info.kgeorgiy.java.advanced.crawler.Downloader;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
@@ -22,12 +20,13 @@ import java.util.function.Function;
  */
 class WebTask {
     private final WebData webData;
-    private final String url;
-    private final int maxDepth;
-    private final Queue<String> result;
+    private final Set<String> result;
     private final AtomicInteger countTasks;
     private final Lock counterLock = new ReentrantLock();
     private final Condition isDone = counterLock.newCondition();
+
+    private final ConcurrentOptional<IOException> exceptionThread;
+
 
     /**
      * @param webData object with thread pools
@@ -36,26 +35,30 @@ class WebTask {
      */
     public WebTask(WebData webData, String url, int maxDepth) {
         this.webData = webData;
-        this.url = url;
-        this.maxDepth = maxDepth;
-        this.result = new ConcurrentLinkedQueue<>();
+        this.result = new ConcurrentSkipListSet<>();
         countTasks = new AtomicInteger();
+        exceptionThread = new ConcurrentOptional<>();
     }
 
     /**
      * Download all links from url by depth.
-     * @return list of downloaded urls
+     * @return list of unique downloaded urls
      */
-    public List<String> download() {
+    public List<String> download(String url, int maxDepth) throws IOException{
         try {
             counterLock.lock();
-            webData.downloadThreads.submit(new DownloaderWorker(url, 1));
+            result.add(url);
+            webData.downloadThreads.submit(new DownloaderWorker(url, maxDepth));
             while (countTasks.get() > 0) {
                     isDone.await();
             }
+            webData.clearMap();
         } catch (InterruptedException ignored) {
         } finally {
             counterLock.unlock();
+        }
+        if (exceptionThread.isPresent()) {
+            throw exceptionThread.get();
         }
         return new ArrayList<>(result);
     }
@@ -84,14 +87,17 @@ class WebTask {
         @Override
         public void run() {
             try {
-                webData.acquire(url);
-                Document document = webData.downloader.download(url);
-                webData.release(url);
-                result.add(url);
-                if (curDepth < maxDepth) {
-                    webData.extractorThreads.submit(new ExectractorWorker(document, curDepth + 1));
+                if (!exceptionThread.isPresent())
+                {
+                    webData.acquire(url);
+                    Document document = webData.downloader.download(url);
+                    webData.release(url);
+                    if (curDepth > 1) {
+                        webData.extractorThreads.submit(new ExectractorWorker(document, curDepth - 1));
+                    }
                 }
-            } catch (IOException ignored) {
+            } catch (IOException e) {
+                exceptionThread.set(e);
             } finally {
                 countDown();
             }
@@ -111,11 +117,16 @@ class WebTask {
         @Override
         public void run() {
             try {
-                List<String> links = document.extractLinks();
-                for (String link : links) {
-                    webData.downloadThreads.submit(new DownloaderWorker(link, curDepth));
+                if (!exceptionThread.isPresent()) {
+                    List<String> links = document.extractLinks();
+                    for (String link : links) {
+                        if (result.add(link)) {
+                            webData.downloadThreads.submit(new DownloaderWorker(link, curDepth));
+                        }
+                    }
                 }
-            } catch (IOException ignored) {
+            } catch (IOException e) {
+                exceptionThread.set(e);
             } finally {
                 countDown();
             }

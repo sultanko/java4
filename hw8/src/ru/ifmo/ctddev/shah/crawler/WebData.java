@@ -1,9 +1,12 @@
 package ru.ifmo.ctddev.shah.crawler;
 
+import com.sun.corba.se.impl.encoding.OSFCodeSetRegistry;
 import info.kgeorgiy.java.advanced.crawler.Downloader;
 import info.kgeorgiy.java.advanced.crawler.URLUtils;
 
 import java.net.MalformedURLException;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.*;
 
 /**
@@ -30,11 +33,18 @@ class WebData {
         hosts = new ConcurrentHashMap<>();
     }
 
+    /**
+     * Stop all threads.
+     */
     public void close() {
         downloadThreads.shutdown();
         extractorThreads.shutdown();
     }
 
+    /**
+     * Acquires permit from semaphore for host of url
+     * @param url url
+     */
     public void acquire(String url) {
         try {
             String host = URLUtils.getHost(url);
@@ -46,11 +56,30 @@ class WebData {
         }
     }
 
+    /**
+     * Release permit from semaphore for host of url
+     * @param url url
+     */
     public void release(String url) {
         try {
             String host = URLUtils.getHost(url);
             hosts.get(host).release();
         } catch (MalformedURLException ignored) {
+        }
+    }
+
+    /**
+     * Remove hosts from map if this isn't downloading now
+     */
+    public void clearMap() {
+        synchronized (hosts) {
+            Iterator<Map.Entry<String, Semaphore>> iterator = hosts.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, Semaphore> entry = iterator.next();
+                if (entry.getValue().availablePermits() == perHost) {
+                    iterator.remove();
+                }
+            }
         }
     }
 }
