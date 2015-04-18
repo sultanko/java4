@@ -1,7 +1,8 @@
 package ru.ifmo.ctddev.shah.crawler;
 
 import info.kgeorgiy.java.advanced.crawler.Document;
-import info.kgeorgiy.java.advanced.crawler.Downloader;
+import info.kgeorgiy.java.advanced.crawler.URLUtils;
+import javafx.util.Pair;
 
 import java.io.IOException;
 import java.util.*;
@@ -10,8 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Function;
 
 /**
  * Created on 06.04.15.
@@ -20,24 +19,24 @@ import java.util.function.Function;
  */
 class WebTask {
     private final WebData webData;
-    private final Set<String> result;
+//    private final Set<String> result;
     private final AtomicInteger countTasks;
     private final Lock counterLock = new ReentrantLock();
     private final Condition isDone = counterLock.newCondition();
+    private final ConcurrentMap<String, Pair<Document, Integer>> downloadedLinks;
 
     private final ConcurrentOptional<IOException> exceptionThread;
 
 
     /**
      * @param webData object with thread pools
-     * @param url url to download
-     * @param maxDepth max depth of downloaded links
      */
-    public WebTask(WebData webData, String url, int maxDepth) {
+    public WebTask(WebData webData) {
         this.webData = webData;
-        this.result = new ConcurrentSkipListSet<>();
+//        this.result = Collections.newSetFromMap(new ConcurrentHashMap<>());
         countTasks = new AtomicInteger();
         exceptionThread = new ConcurrentOptional<>();
+        downloadedLinks = new ConcurrentHashMap<>();
     }
 
     /**
@@ -47,20 +46,23 @@ class WebTask {
     public List<String> download(String url, int maxDepth) throws IOException{
         try {
             counterLock.lock();
-            result.add(url);
+//            result.add(url);
+            downloadedLinks.put(url, new Pair<>(null, maxDepth));
+            webData.addNewLink(url, maxDepth);
             webData.downloadThreads.submit(new DownloaderWorker(url, maxDepth));
             while (countTasks.get() > 0) {
                     isDone.await();
             }
             webData.clearMap();
         } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
         } finally {
             counterLock.unlock();
         }
         if (exceptionThread.isPresent()) {
             throw exceptionThread.get();
         }
-        return new ArrayList<>(result);
+        return new ArrayList<>(downloadedLinks.keySet());
     }
 
     private void countDown() {
@@ -89,15 +91,24 @@ class WebTask {
             try {
                 if (!exceptionThread.isPresent())
                 {
-                    webData.acquire(url);
-                    Document document = webData.downloader.download(url);
-                    webData.release(url);
-                    if (curDepth > 1) {
-                        webData.extractorThreads.submit(new ExectractorWorker(document, curDepth - 1));
+//                    System.err.println("NOW WORKING " + countTasks);
+                    Pair<String, Integer> now = webData.acquire();
+//                    System.err.println("DOWNLOADING ACUIRED " + now.getKey() + "DEPTH " + now.getValue());
+                    Document document = webData.downloader.download(now.getKey());
+//                    System.err.println("DOWNLOADED " + now.getKey());
+                    webData.release(now.getKey());
+                    downloadedLinks.replace(now.getKey(), new Pair<>(document, now.getValue()));
+//                    System.err.println("DOWNLOADING RELEASED " + now.getKey());
+                    if (now.getValue() > 1) {
+                        webData.extractorThreads.submit(new ExectractorWorker(document, now.getValue() - 1));
                     }
                 }
             } catch (IOException e) {
+                System.err.println("EXCEPTION!!");
                 exceptionThread.set(e);
+            } catch (InterruptedException ignored) {
+                System.err.println("INTERRUPTED!!");
+                Thread.currentThread().interrupt();
             } finally {
                 countDown();
             }
@@ -119,9 +130,16 @@ class WebTask {
             try {
                 if (!exceptionThread.isPresent()) {
                     List<String> links = document.extractLinks();
-                    for (String link : links) {
-                        if (result.add(link)) {
-                            webData.downloadThreads.submit(new DownloaderWorker(link, curDepth));
+                    synchronized (webData) {
+                        for (String link : links) {
+                            if (downloadedLinks.putIfAbsent(link, new Pair<>(null, curDepth)) == null) {
+                                webData.addNewLink(link, curDepth);
+                                webData.downloadThreads.submit(new DownloaderWorker(link, curDepth));
+                            } else if (downloadedLinks.get(link).getValue() == 1 && curDepth > 1){
+                                webData.extractorThreads.submit(
+                                        new ExectractorWorker(downloadedLinks.get(link).getKey(), curDepth - 1));
+//                                System.err.println("FAIL ADD " + link + " " + curDepth);
+                            }
                         }
                     }
                 }
