@@ -56,7 +56,7 @@ public class CachingDownloader implements Downloader {
      * @throws IOException if an error occurred.
      */
     public Document download(final String url) throws IOException {
-        System.out.println("Downloading " + url);
+//        System.out.println("Downloading " + url);
         final URI uri = URLUtils.getURI(url);
         final File file = new File(directory, URLEncoder.encode(uri.toString(), "UTF-8"));
         try (
@@ -69,7 +69,7 @@ public class CachingDownloader implements Downloader {
                 os.write(buffer, 0, read);
             }
         }
-        System.out.println("Downloaded " + url);
+//        System.out.println("Downloaded " + url);
         return () -> {
             final Elements elements = Jsoup.parse(file, null, url).select("a[href]");
             final List<String> result = new ArrayList<>();

@@ -1,7 +1,6 @@
 package ru.ifmo.ctddev.shah.crawler;
 
 import info.kgeorgiy.java.advanced.crawler.Document;
-import info.kgeorgiy.java.advanced.crawler.URLUtils;
 import javafx.util.Pair;
 
 import java.io.IOException;
@@ -19,13 +18,12 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 class WebTask {
     private final WebData webData;
-//    private final Set<String> result;
     private final AtomicInteger countTasks;
     private final Lock counterLock = new ReentrantLock();
     private final Condition isDone = counterLock.newCondition();
     private final ConcurrentMap<String, Pair<Document, Integer>> downloadedLinks;
 
-    private final ConcurrentOptional<IOException> exceptionThread;
+    private volatile Optional<IOException> exceptionThread;
 
 
     /**
@@ -33,9 +31,8 @@ class WebTask {
      */
     public WebTask(WebData webData) {
         this.webData = webData;
-//        this.result = Collections.newSetFromMap(new ConcurrentHashMap<>());
         countTasks = new AtomicInteger();
-        exceptionThread = new ConcurrentOptional<>();
+        exceptionThread = Optional.empty();
         downloadedLinks = new ConcurrentHashMap<>();
     }
 
@@ -44,16 +41,18 @@ class WebTask {
      * @return list of unique downloaded urls
      */
     public List<String> download(String url, int maxDepth) throws IOException{
+        List<String> result = new ArrayList<>();
         try {
             counterLock.lock();
 //            result.add(url);
             downloadedLinks.put(url, new Pair<>(null, maxDepth));
             webData.addNewLink(url, maxDepth);
-            webData.downloadThreads.submit(new DownloaderWorker(url, maxDepth));
+            webData.downloadThreads.submit(new DownloaderWorker());
             while (countTasks.get() > 0) {
                     isDone.await();
             }
-            webData.clearMap();
+            result.addAll(downloadedLinks.keySet());
+            webData.clearMap(result);
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         } finally {
@@ -62,7 +61,7 @@ class WebTask {
         if (exceptionThread.isPresent()) {
             throw exceptionThread.get();
         }
-        return new ArrayList<>(downloadedLinks.keySet());
+        return result;
     }
 
     private void countDown() {
@@ -77,12 +76,8 @@ class WebTask {
     }
 
     private class DownloaderWorker implements Runnable {
-        private final String url;
-        private final int curDepth;
 
-        private DownloaderWorker(String url, int curDepth) {
-            this.url = url;
-            this.curDepth = curDepth;
+        private DownloaderWorker() {
             countTasks.incrementAndGet();
         }
 
@@ -97,17 +92,18 @@ class WebTask {
                     Document document = webData.downloader.download(now.getKey());
 //                    System.err.println("DOWNLOADED " + now.getKey());
                     webData.release(now.getKey());
-                    downloadedLinks.replace(now.getKey(), new Pair<>(document, now.getValue()));
+                    synchronized (downloadedLinks) {
+                        now = new Pair<>(now.getKey(), downloadedLinks.get(now.getKey()).getValue());
+                        downloadedLinks.replace(now.getKey(), new Pair<>(document, now.getValue()));
+                    }
 //                    System.err.println("DOWNLOADING RELEASED " + now.getKey());
                     if (now.getValue() > 1) {
                         webData.extractorThreads.submit(new ExectractorWorker(document, now.getValue() - 1));
                     }
                 }
             } catch (IOException e) {
-                System.err.println("EXCEPTION!!");
-                exceptionThread.set(e);
+                exceptionThread = Optional.of(e);
             } catch (InterruptedException ignored) {
-                System.err.println("INTERRUPTED!!");
                 Thread.currentThread().interrupt();
             } finally {
                 countDown();
@@ -130,21 +126,25 @@ class WebTask {
             try {
                 if (!exceptionThread.isPresent()) {
                     List<String> links = document.extractLinks();
-                    synchronized (webData) {
-                        for (String link : links) {
-                            if (downloadedLinks.putIfAbsent(link, new Pair<>(null, curDepth)) == null) {
-                                webData.addNewLink(link, curDepth);
-                                webData.downloadThreads.submit(new DownloaderWorker(link, curDepth));
-                            } else if (downloadedLinks.get(link).getValue() == 1 && curDepth > 1){
-                                webData.extractorThreads.submit(
-                                        new ExectractorWorker(downloadedLinks.get(link).getKey(), curDepth - 1));
-//                                System.err.println("FAIL ADD " + link + " " + curDepth);
+                    for (String link : links) {
+                        if (downloadedLinks.putIfAbsent(link, new Pair<>(null, curDepth)) == null) {
+                            webData.addNewLink(link, curDepth);
+                            webData.downloadThreads.submit(new DownloaderWorker());
+                        } else if (downloadedLinks.get(link).getValue() == 1 && curDepth > 1){
+                            synchronized (downloadedLinks) {
+                                Document linkDoc = downloadedLinks.get(link).getKey();
+                                if (linkDoc != null) {
+                                    webData.extractorThreads.submit(
+                                            new ExectractorWorker(downloadedLinks.get(link).getKey(), curDepth - 1));
+                                }
+                                downloadedLinks.replace(link, new Pair<>(linkDoc, curDepth));
                             }
+//                                System.err.println("FAIL ADD " + link + " " + curDepth);
                         }
                     }
                 }
             } catch (IOException e) {
-                exceptionThread.set(e);
+                exceptionThread = Optional.of(e);
             } finally {
                 countDown();
             }
