@@ -1,14 +1,17 @@
 package ru.ifmo.ctddev.shah.crawler;
 
 import com.sun.corba.se.impl.encoding.OSFCodeSetRegistry;
+import info.kgeorgiy.java.advanced.crawler.Document;
 import info.kgeorgiy.java.advanced.crawler.Downloader;
 import info.kgeorgiy.java.advanced.crawler.URLUtils;
 import javafx.util.Pair;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -27,10 +30,8 @@ class WebData {
     public final ExecutorService extractorThreads;
     public final List<NavigableSet<String>> nowAvailableHosts;
     public final AtomicInteger firstHost;
-    public final ConcurrentMap<String, Integer> hostDownloaders;
-    public final ConcurrentMap<String, BlockingQueue< Pair<String, Integer>> > availableLinks;
-    public final Lock hostLock = new ReentrantLock();
-    public final Condition stateUpdated = hostLock.newCondition();
+    public final Map<String, Integer> hostDownloaders;
+    public final Map<String, BlockingQueue< Pair<String, Integer>> > availableLinks;
 
     public WebData(Downloader downloader, int downloaders, int extractors, int perHost) {
         this.downloader = downloader;
@@ -43,10 +44,10 @@ class WebData {
         this.extractorThreads = new ThreadPoolExecutor(extractors, extractors, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<>(), Executors.defaultThreadFactory(),
                 new ThreadPoolExecutor.CallerRunsPolicy());
-        nowAvailableHosts = new CopyOnWriteArrayList<>();
+        nowAvailableHosts = new ArrayList<>();
         nowAvailableHosts.add(new TreeSet<>());
-        hostDownloaders = new ConcurrentHashMap<>();
-        availableLinks = new ConcurrentHashMap<>();
+        hostDownloaders = new HashMap<>();
+        availableLinks = new HashMap<>();
         firstHost = new AtomicInteger(perHost);
     }
 
@@ -61,83 +62,140 @@ class WebData {
     /**
      * Acquires permit from semaphore for host of url
      */
-    public Pair<String, Integer> acquire() throws InterruptedException {
-        try {
-            hostLock.lock();
-            while (firstHost.get() < perHost) {
-                if (!nowAvailableHosts.get(firstHost.get()).isEmpty()) {
-                    break;
-                }
-                firstHost.incrementAndGet();
+    public synchronized Pair<String, Integer> acquire() throws InterruptedException {
+        //            hostLock.lock();
+        while (firstHost.get() < perHost) {
+            if (!nowAvailableHosts.get(firstHost.get()).isEmpty()) {
+                break;
             }
-            while (firstHost.get() >= perHost) {
-                stateUpdated.await();
-            }
-            String host = nowAvailableHosts.get(firstHost.get()).pollFirst();
-            int counter = firstHost.get() + 1;
-            hostDownloaders.replace(host, counter);
-            if (availableLinks.get(host).size() > 1) {
-                if (nowAvailableHosts.size() <= counter) {
-                    nowAvailableHosts.add(new ConcurrentSkipListSet<>());
-                }
-                nowAvailableHosts.get(counter).add(host);
-            }
-            return availableLinks.get(host).poll();
-        } finally {
-            hostLock.unlock();
+            firstHost.incrementAndGet();
         }
+        while (firstHost.get() >= perHost) {
+//                stateUpdated.await();
+            wait();
+        }
+        String host = nowAvailableHosts.get(firstHost.get()).pollFirst();
+        int counter = firstHost.get() + 1;
+        hostDownloaders.replace(host, counter);
+        if (availableLinks.get(host).size() > 1) {
+            if (nowAvailableHosts.size() <= counter) {
+                nowAvailableHosts.add(new TreeSet<>());
+            }
+            nowAvailableHosts.get(counter).add(host);
+        }
+        return availableLinks.get(host).poll();
     }
 
     /**
      * Release permit from semaphore for host of url
      * @param url url
      */
-    public void release(String url) throws MalformedURLException {
+    public synchronized void release(String url) throws MalformedURLException {
         String host = URLUtils.getHost(url);
-        try {
-            hostLock.lock();
-            Integer counter;
-            do {
-                counter = hostDownloaders.replace(host, hostDownloaders.get(host) - 1);
-            } while (counter == null);
-            if (nowAvailableHosts.size() > counter
-                && nowAvailableHosts.get(counter).remove(host)) {
-                    counter--;
-                    if (nowAvailableHosts.get(counter).add(host)) {
-                        while (!firstHost.compareAndSet(firstHost.get(), Math.min(firstHost.get(), counter)))
-                        {}
-                            stateUpdated.signal();
-                    }
-            }
-        } finally {
-            hostLock.unlock();
+        Integer counter = hostDownloaders.replace(host, hostDownloaders.get(host) - 1);
+        if (nowAvailableHosts.size() > counter
+            && nowAvailableHosts.get(counter).remove(host)) {
+                counter--;
+                if (nowAvailableHosts.get(counter).add(host)) {
+                    firstHost.set(Math.min(firstHost.get(), counter));
+//                        stateUpdated.signal();
+                    notify();
+                }
         }
     }
 
-    public void addNewLink(String link, int curDepth) throws MalformedURLException {
+    public synchronized void addNewLink(String link, int curDepth) throws MalformedURLException {
         String host = URLUtils.getHost(link);
+        //            hostLock.lock();
         if (!availableLinks.containsKey(host)) {
-            availableLinks.putIfAbsent(host, new LinkedBlockingQueue<>());
+            availableLinks.put(host, new LinkedBlockingQueue<>());
         }
         availableLinks.get(host).add(new Pair<>(link, curDepth));
         if (availableLinks.get(host).size() == 1) {
             hostDownloaders.putIfAbsent(host, 0);
-            try {
-                hostLock.lock();
-                int countHost = hostDownloaders.get(host);
-                if (nowAvailableHosts.size() <= countHost) {
-                    nowAvailableHosts.add(new TreeSet<>());
-                }
-                if (nowAvailableHosts.get(countHost).add(host)) {
-                    if (countHost < firstHost.get()) {
-                        firstHost.set(countHost);
-                    }
-                    stateUpdated.signal();
-                }
-            } finally {
-                hostLock.unlock();
+            int countHost = hostDownloaders.get(host);
+            if (nowAvailableHosts.size() <= countHost) {
+                nowAvailableHosts.add(new TreeSet<>());
+            }
+            if (nowAvailableHosts.get(countHost).add(host)) {
+                firstHost.set(Math.min(firstHost.get(), countHost));
+//                    stateUpdated.signal();
+                notify();
             }
         }
+    }
+
+    public void downloadNewLink(final ConcurrentMap<String, Pair<Document, Integer>> result, final Phaser phaser, final AtomicReference<IOException> reference) {
+        downloadThreads.submit(() -> {
+            try {
+//                if (reference.get() != null) {
+//                    return;
+//                }
+                Pair<String, Integer> now = acquire();
+                String url = now.getKey();
+                final Document document = downloader.download(url);
+                release(url);
+                final Integer urlDepth = now.getValue();
+                if (urlDepth > 1) {
+                    extractNewLink(result, phaser, reference, document, urlDepth);
+                }
+
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            } catch (IOException e) {
+                reference.set(e);
+            } finally {
+                phaser.arrive();
+            }
+        });
+    }
+
+    public void extractNewLink(final ConcurrentMap<String, Pair<Document, Integer>> result, final Phaser phaser, final AtomicReference<IOException> reference,
+                               final Document document, final Integer urlDepth) {
+        phaser.register();
+        extractorThreads.submit(() -> {
+            try {
+//                            if (reference.get() != null) {
+//                                return;
+//                            }
+                List<String> links = document.extractLinks();
+                for (String extractedLink : links) {
+                    Pair<Document, Integer> oldValue = result.putIfAbsent(extractedLink, new Pair<>(null, urlDepth - 1));
+                    if (oldValue == null) {
+                        addNewLink(result, phaser, reference, extractedLink, urlDepth - 1);
+                    } else if (oldValue.getValue() < urlDepth - 1) {
+                        if (oldValue.getKey() != null) {
+                            extractNewLink(result, phaser, reference, oldValue.getKey(), urlDepth);
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                reference.set(e);
+            } finally {
+                phaser.arrive();
+            }
+        });
+
+    }
+
+    public synchronized void addNewLink(final ConcurrentMap<String, Pair<Document, Integer>> result, final Phaser phaser, final AtomicReference<IOException> reference,
+                                        String link, int curDepth) throws MalformedURLException {
+        String host = URLUtils.getHost(link);
+        phaser.register();
+        availableLinks.putIfAbsent(host, new LinkedBlockingQueue<>());
+        availableLinks.get(host).add(new Pair<>(link, curDepth));
+        if (availableLinks.get(host).size() == 1) {
+            hostDownloaders.putIfAbsent(host, 0);
+            int countHost = hostDownloaders.get(host);
+            if (nowAvailableHosts.size() <= countHost) {
+                nowAvailableHosts.add(new TreeSet<>());
+            }
+            if (nowAvailableHosts.get(countHost).add(host)) {
+                firstHost.set(Math.min(firstHost.get(), countHost));
+                notify();
+            }
+        }
+        downloadNewLink(result, phaser, reference);
     }
 
     /**

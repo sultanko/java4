@@ -29,7 +29,7 @@ public class WebCrawler implements Crawler {
      * @param url url to download
      * @param depth max depth of links to download
      * @return list of downloaded links
-     * @throws IOException
+     * @throws IOException when error while downloading occured
      */
     @Override
     public List<String> download(String url, int depth) throws IOException {
