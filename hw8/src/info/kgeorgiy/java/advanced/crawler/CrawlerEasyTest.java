@@ -1,5 +1,6 @@
 package info.kgeorgiy.java.advanced.crawler;
 
+import info.kgeorgiy.java.advanced.base.BaseTest;
 import org.junit.Assert;
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
@@ -7,8 +8,6 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 
 import java.io.IOException;
@@ -20,9 +19,8 @@ import java.util.Set;
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class CrawlerEasyTest {
+public class CrawlerEasyTest extends BaseTest {
     @Rule
     public TestRule watcher = new TestWatcher() {
         protected void starting(final Description description) {
@@ -46,27 +44,32 @@ public class CrawlerEasyTest {
     }
 
     @Test
-    public void test04_noLimits() throws IOException {
+    public void test04_shallow() throws IOException {
+        test("http://www.kgeorgiy.info", 2);
+    }
+
+    @Test
+    public void test05_noLimits() throws IOException {
         test(Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, 10, 10);
     }
 
     @Test
-    public void test05_limitDownloads() throws IOException {
+    public void test06_limitDownloads() throws IOException {
         test(10, Integer.MAX_VALUE, Integer.MAX_VALUE, 300, 10);
     }
 
     @Test
-    public void test06_limitExtractors() throws IOException {
+    public void test07_limitExtractors() throws IOException {
         test(Integer.MAX_VALUE, 10, Integer.MAX_VALUE, 10, 300);
     }
 
     @Test
-    public void test07_limitBoth() throws IOException {
+    public void test08_limitBoth() throws IOException {
         test(10, 10, Integer.MAX_VALUE, 300, 300);
     }
 
     @Test
-    public void test08_performance() throws IOException {
+    public void test09_performance() throws IOException {
         final long time = test(Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, 100, 1000);
         System.out.println("Time: " + time);
         Assert.assertTrue("Not parallel", time < 3000);
@@ -82,12 +85,13 @@ public class CrawlerEasyTest {
 
     protected long test(final String url, final int depth, final int downloaders, final int extractors, final int perHost, final int downloadTimeout, final int extractTimeout) throws IOException {
         final long start = System.currentTimeMillis();
-        final ReplayDownloader replayDownloader = new ReplayDownloader(URLUtils.getHost(url) + ".ser", downloadTimeout, extractTimeout);
+        final ReplayDownloader replayDownloader = new ReplayDownloader(url, depth, downloadTimeout, extractTimeout);
         final Set<String> actual = new HashSet<>(download(url, depth, replayDownloader, downloaders, extractors, perHost));
-        final Set<String> missing = diff(replayDownloader.expected(), actual);
-        final Set<String> excess = diff(actual, replayDownloader.expected());
-        final String message = String.format("\nmissing = %d\nexcess = %d", missing.size(), excess.size());
-        Assert.assertEquals(message, 0, missing.size() + excess.size());
+        final Set<String> expected = replayDownloader.expected(depth);
+        final Set<String> missing = diff(expected, actual);
+        final Set<String> excess = diff(actual, expected);
+        final String message = String.format("\nmissing = %s\nexcess = %s\n", missing, excess);
+        Assert.assertTrue(message, missing.isEmpty() && excess.isEmpty());
         return System.currentTimeMillis() - start;
     }
 
@@ -101,11 +105,8 @@ public class CrawlerEasyTest {
     }
 
     private static Crawler createInstance(final Downloader downloader, final int downloaders, final int extractors, final int perHost) {
-        final String className = System.getProperty("cut");
-        Assert.assertTrue("Class name not specified", className != null);
-
         try {
-            final Constructor<?> constructor = Class.forName(className).getConstructor(Downloader.class, int.class, int.class, int.class);
+            final Constructor<?> constructor = loadClass().getConstructor(Downloader.class, int.class, int.class, int.class);
             return (Crawler) constructor.newInstance(downloader, downloaders, extractors, perHost);
         } catch (final Exception e) {
             throw new AssertionError(e);

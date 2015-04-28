@@ -1,5 +1,6 @@
 package info.kgeorgiy.java.advanced.implementor;
 
+import info.kgeorgiy.java.advanced.base.BaseTest;
 import info.kgeorgiy.java.advanced.implementor.examples.InterfaceWithDefaultMethod;
 import info.kgeorgiy.java.advanced.implementor.examples.InterfaceWithStaticMethod;
 import org.junit.Assert;
@@ -8,8 +9,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 import org.omg.DynamicAny.DynAny;
 
@@ -35,9 +34,8 @@ import java.util.List;
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class InterfaceImplementorTest {
+public class InterfaceImplementorTest extends BaseTest {
     private String methodName;
     @Rule
     public TestWatcher watcher = new TestWatcher() {
@@ -153,7 +151,7 @@ public class InterfaceImplementorTest {
     private void implement(final boolean shouldFail, final File root, final List<Class<?>> classes) {
         JarImpler implementor;
         try {
-            implementor = (JarImpler) loadClass().newInstance();
+            implementor = createCUT();
         } catch (final Exception e) {
             e.printStackTrace();
             Assert.fail("Instantiation error");
@@ -182,13 +180,6 @@ public class InterfaceImplementorTest {
     private File getFile(final File root, final Class<?> clazz) {
         final String path = clazz.getCanonicalName().replace(".", "/") + "Impl.java";
         return new File(root, path).getAbsoluteFile();
-    }
-
-    private Class<?> loadClass() throws ClassNotFoundException {
-        final String className = System.getProperty("cut");
-        Assert.assertTrue("Class name not specified", className != null);
-
-        return Class.forName(className);
     }
 
     private void check(final File root, final List<Class<?>> classes) {

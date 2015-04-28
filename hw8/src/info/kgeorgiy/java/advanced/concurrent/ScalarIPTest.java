@@ -1,5 +1,6 @@
 package info.kgeorgiy.java.advanced.concurrent;
 
+import info.kgeorgiy.java.advanced.base.BaseTest;
 import org.junit.Assert;
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
@@ -7,8 +8,6 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 
 import java.util.*;
@@ -19,9 +18,8 @@ import java.util.stream.Collectors;
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class ScalarIPTest<P extends ScalarIP> {
+public class ScalarIPTest<P extends ScalarIP> extends BaseTest {
     public static final Comparator<Integer> BURN_COMPARATOR = (o1, o2) -> {
         int total = o1 + o2;
         for (int i = 0; i < 50_000_000; i++) {
@@ -138,15 +136,8 @@ public class ScalarIPTest<P extends ScalarIP> {
     }
 
     @SuppressWarnings("unchecked")
-    protected P createInstance(int threads) {
-        final String className = System.getProperty("cut");
-        Assert.assertTrue("Class name not specified", className != null);
-
-        try {
-            return (P) Class.forName(className).newInstance();
-        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
-            throw new AssertionError(e);
-        }
+    protected P createInstance(final int threads) {
+        return createCUT();
     }
 
     protected final class Named<T> {

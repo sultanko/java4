@@ -3,8 +3,6 @@ package info.kgeorgiy.java.advanced.arrayset;
 import net.java.quickcheck.collection.Pair;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 
 import java.util.Collection;
@@ -19,10 +17,8 @@ import static org.junit.Assert.assertEquals;
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class NavigableSetTest extends SortedSetTest {
-
     @Test
     public void test18_lower() {
         for (final Pair<NamedComparator, List<Integer>> pair : withComparator()) {

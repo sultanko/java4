@@ -1,5 +1,6 @@
 package info.kgeorgiy.java.advanced.arrayset;
 
+import info.kgeorgiy.java.advanced.base.BaseTest;
 import net.java.quickcheck.Generator;
 import net.java.quickcheck.collection.Pair;
 import org.junit.Assert;
@@ -9,8 +10,6 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 
 import java.util.*;
@@ -24,9 +23,8 @@ import static net.java.quickcheck.generator.PrimitiveGenerators.integers;
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class SortedSetTest {
+public class SortedSetTest extends BaseTest {
 
     public static final int PERFORMANCE_SIZE = 10_000;
 
@@ -89,49 +87,25 @@ public class SortedSetTest {
 
     @Test
     public void test06_immutable() {
-        final SortedSet<Integer> set = set(Arrays.asList(1));
-        try {
-            set.add(1);
-            Assert.fail("add should throw UnsupportedOperationException");
-        } catch (final UnsupportedOperationException e) {
-        }
-
-        try {
-            set.addAll(Arrays.asList(1));
-            Assert.fail("addAll should throw UnsupportedOperationException");
-        } catch (final UnsupportedOperationException e) {
-        }
-
-        try {
-            set.clear();
-            Assert.fail("clear should throw UnsupportedOperationException");
-        } catch (final UnsupportedOperationException e) {
-        }
-
-        try {
+        final SortedSet<Integer> set = set(Collections.singletonList(1));
+        checkUnsupported(() -> set.add(1));
+        checkUnsupported(() -> set.addAll(Collections.singletonList(1)));
+        checkUnsupported(set::clear);
+        checkUnsupported(() -> {
             final Iterator<Integer> iterator = set.iterator();
             iterator.next();
             iterator.remove();
-            Assert.fail("iterator.remove should throw UnsupportedOperationException");
-        } catch (final UnsupportedOperationException e) {
-        }
+        });
+        checkUnsupported(() -> set.remove(1));
+        checkUnsupported(() -> set.removeAll(Collections.singletonList(1)));
+        checkUnsupported(() -> set.retainAll(Collections.singletonList(0)));
+    }
 
+    private void checkUnsupported(final Runnable command) {
         try {
-            set.remove(1);
-            Assert.fail("remove should throw UnsupportedOperationException");
-        } catch (final UnsupportedOperationException e) {
-        }
-
-        try {
-            set.removeAll(Arrays.asList(1));
-            Assert.fail("removeAll should throw UnsupportedOperationException");
-        } catch (final UnsupportedOperationException e) {
-        }
-
-        try {
-            set.retainAll(Arrays.asList(0));
-            Assert.fail("retainAll should throw UnsupportedOperationException");
-        } catch (final UnsupportedOperationException e) {
+            command.run();
+            Assert.fail("add should throw UnsupportedOperationException");
+        } catch (final UnsupportedOperationException ignore) {
         }
     }
 
@@ -156,13 +130,10 @@ public class SortedSetTest {
 
     @Test
     public void test08_containsPerformance() {
-        performance("contains", new Runnable() {
-            @Override
-            public void run() {
-                final SortedSet<Integer> set = performanceSet(10_000);
-                for (final Integer element : set) {
-                    Assert.assertTrue(null, set.contains(element));
-                }
+        performance("contains", () -> {
+            final SortedSet<Integer> set = performanceSet(10_000);
+            for (final Integer element : set) {
+                Assert.assertTrue(null, set.contains(element));
             }
         });
     }
@@ -188,12 +159,9 @@ public class SortedSetTest {
 
     @Test
     public void test10_containsAllPerformance() {
-        performance("contains", new Runnable() {
-            @Override
-            public void run() {
-                final SortedSet<Integer> set = performanceSet(10_000);
-                Assert.assertTrue(null, set.containsAll(new ArrayList<>(set)));
-            }
+        performance("contains", () -> {
+            final SortedSet<Integer> set = performanceSet(10_000);
+            Assert.assertTrue(null, set.containsAll(new ArrayList<>(set)));
         });
     }
 
@@ -221,7 +189,7 @@ public class SortedSetTest {
     }
 
     private List<Number> toArray(final SortedSet<Integer> set) {
-        return Arrays.asList(set.toArray(new Number[0]));
+        return Arrays.asList(set.toArray(new Number[set.size()]));
     }
 
     private TreeSet<Integer> treeSet(final List<Integer> elements) {
@@ -229,7 +197,6 @@ public class SortedSetTest {
     }
 
     private SortedSet<Integer> set(final List<Integer> elements) {
-//        List<Integer> z = new LlinkedList<>(treeSet(elements));
         return create(new Object[]{elements}, Collection.class);
     }
 
@@ -297,13 +264,6 @@ public class SortedSetTest {
                 }
             }
     ));
-
-    private Class<?> loadClass() throws ClassNotFoundException {
-        final String className = System.getProperty("cut");
-        Assert.assertTrue("Class name not specified", className != null);
-
-        return Class.forName(className);
-    }
 
     private SortedSet<Integer> create(final Object[] params, final Class<?>... types) {
         try {
@@ -418,13 +378,10 @@ public class SortedSetTest {
 
     @Test
     public void test15_tailSetPerformance() {
-        performance("tailSet", new Runnable() {
-            @Override
-            public void run() {
-                final SortedSet<Integer> set = performanceSet(10_000);
-                for (final Integer element : set) {
-                    Assert.assertTrue(null, set.tailSet(element).contains(element));
-                }
+        performance("tailSet", () -> {
+            final SortedSet<Integer> set = performanceSet(10_000);
+            for (final Integer element : set) {
+                Assert.assertTrue(null, set.tailSet(element).contains(element));
             }
         });
     }

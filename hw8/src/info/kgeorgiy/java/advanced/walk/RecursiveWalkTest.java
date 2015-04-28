@@ -2,26 +2,24 @@ package info.kgeorgiy.java.advanced.walk;
 
 import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class RecursiveWalkTest extends WalkTest {
     @Test
     public void test13_singleRecursion() throws IOException {
         final Path root = DIR.resolve(name.getMethodName());
-        test(Arrays.asList(root.toString()), randomDirs(3, 4, 100, root));
+        test(Collections.singletonList(root.toString()), randomDirs(3, 4, 100, root));
     }
 
     @Test

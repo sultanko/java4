@@ -5,8 +5,6 @@ import info.kgeorgiy.java.advanced.concurrent.ScalarIP;
 import org.junit.AfterClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 
 import java.util.Arrays;
@@ -14,7 +12,6 @@ import java.util.Arrays;
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ListMapperTest extends ListIPTest {
     public ListMapperTest() {
@@ -26,7 +23,6 @@ public class ListMapperTest extends ListIPTest {
         new ScalarMapperTest().test05_sleepPerformance();
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     protected ScalarIP createInstance(final int threads) {
         return ScalarMapperTest.instance(threads);

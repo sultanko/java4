@@ -2,8 +2,6 @@ package info.kgeorgiy.java.advanced.implementor;
 
 import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 import org.omg.CORBA_2_3.ORB;
 
@@ -21,7 +19,6 @@ import javax.naming.ldap.LdapReferralException;
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ClassImplementorTest extends InterfaceImplementorTest {
     @Test

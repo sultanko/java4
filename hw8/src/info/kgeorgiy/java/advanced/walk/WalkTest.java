@@ -1,12 +1,11 @@
 package info.kgeorgiy.java.advanced.walk;
 
+import info.kgeorgiy.java.advanced.base.BaseTest;
 import org.junit.Assert;
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
 
 import java.io.IOException;
@@ -18,14 +17,16 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
 
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
-@RunWith(JUnit4.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class WalkTest {
+public class WalkTest extends BaseTest {
     protected static final Path DIR = Paths.get("__Test__Walk__");
     private static String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     protected static final Random random = new Random(23084701432182342L);
@@ -149,22 +150,19 @@ public class WalkTest {
     }
 
     private void runRaw(final String... args) {
-        final String className = System.getProperty("cut");
-        Assert.assertTrue("Class name not specified", className != null);
         final Method method;
+        final Class<?> cut = loadClass();
         try {
-            method = Class.forName(className).getMethod("main", String[].class);
-        } catch (final ClassNotFoundException e) {
-            throw new AssertionError("Cannot load class " + className, e);
+            method = cut.getMethod("main", String[].class);
         } catch (final NoSuchMethodException e) {
-            throw new AssertionError("Cannot find method main(String[]) of class " + className, e);
+            throw new AssertionError("Cannot find method main(String[]) of " + cut, e);
         }
         System.out.println("Running " + name.getMethodName());
         try {
             method.invoke(null, (Object) args);
             syncErr();
         } catch (final IllegalAccessException e) {
-            throw new AssertionError("Cannot call main(String[]) of class " + className, e);
+            throw new AssertionError("Cannot call main(String[]) of " + cut, e);
         } catch (final InvocationTargetException e) {
             throw new AssertionError("Error thrown", e.getCause());
         }

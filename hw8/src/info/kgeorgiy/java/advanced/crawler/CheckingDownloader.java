@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
  */
 public class CheckingDownloader implements Downloader {
-    private final Downloader downloader;
+    public final Downloader downloader;
     private final AtomicInteger downloaders;
     private final AtomicInteger extractors;
     private final AtomicReference<String> error = new AtomicReference<>();

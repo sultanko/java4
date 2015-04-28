@@ -6,6 +6,7 @@ import org.junit.runner.notification.Failure;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.*;
 
 /**
  * @author Georgiy Korneev (kgeorgiy@kgeorgiy.info)
@@ -24,7 +25,7 @@ public class BaseTester {
             return;
         }
 
-        System.setProperty("cut", args[1]);
+        System.setProperty(BaseTest.CUT_PROPERTY, args[1]);
         final Result result = new JUnitCore().run(token);
         if (!result.wasSuccessful()) {
             for (final Failure failure : result.getFailures()) {
