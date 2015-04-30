@@ -13,7 +13,6 @@ import org.junit.runners.MethodSorters;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -86,19 +85,28 @@ public class CrawlerEasyTest extends BaseTest {
     protected long test(final String url, final int depth, final int downloaders, final int extractors, final int perHost, final int downloadTimeout, final int extractTimeout) throws IOException {
         final long start = System.currentTimeMillis();
         final ReplayDownloader replayDownloader = new ReplayDownloader(url, depth, downloadTimeout, extractTimeout);
-        final Set<String> actual = new HashSet<>(download(url, depth, replayDownloader, downloaders, extractors, perHost));
-        final Set<String> expected = replayDownloader.expected(depth);
+        final Result actual = download(url, depth, replayDownloader, downloaders, extractors, perHost);
+        final Result expected = replayDownloader.expected(depth);
+        checkResult(expected, actual);
+        return System.currentTimeMillis() - start;
+    }
+
+    public static void checkResult(final Result expected, final Result actual) {
+        checkDownloaded(new HashSet<>(expected.getDownloaded()), new HashSet<>(actual.getDownloaded()));
+        Assert.assertEquals("Errors", expected.getErrors(), actual.getErrors());
+    }
+
+    private static void checkDownloaded(final Set<String> expected, final Set<String> actual) {
         final Set<String> missing = diff(expected, actual);
         final Set<String> excess = diff(actual, expected);
         final String message = String.format("\nmissing = %s\nexcess = %s\n", missing, excess);
         Assert.assertTrue(message, missing.isEmpty() && excess.isEmpty());
-        return System.currentTimeMillis() - start;
     }
 
-    private static List<String> download(final String url, final int depth, final Downloader downloader, final int downloaders, final int extractors, final int perHost) throws IOException {
+    private static Result download(final String url, final int depth, final Downloader downloader, final int downloaders, final int extractors, final int perHost) throws IOException {
         final CheckingDownloader checkingDownloader = new CheckingDownloader(downloader, downloaders, extractors, perHost);
         try (Crawler crawler = createInstance(checkingDownloader, downloaders, extractors, perHost)) {
-            final List<String> result = crawler.download(url, depth);
+            final Result result = crawler.download(url, depth);
             Assert.assertTrue(checkingDownloader.getError(), checkingDownloader.getError() == null);
             return result;
         }

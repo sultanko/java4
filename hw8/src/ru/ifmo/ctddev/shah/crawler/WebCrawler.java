@@ -2,6 +2,7 @@ package ru.ifmo.ctddev.shah.crawler;
 
 import info.kgeorgiy.java.advanced.crawler.Crawler;
 import info.kgeorgiy.java.advanced.crawler.Downloader;
+import info.kgeorgiy.java.advanced.crawler.Result;
 
 import java.io.IOException;
 import java.util.*;
@@ -32,7 +33,7 @@ public class WebCrawler implements Crawler {
      * @throws IOException when error while downloading occured
      */
     @Override
-    public List<String> download(String url, int depth) throws IOException {
+    public Result download(String url, int depth) {
         WebTask webTask = new WebTask(webData);
         return webTask.download(url, depth);
     }

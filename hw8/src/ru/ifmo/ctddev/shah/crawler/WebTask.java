@@ -1,6 +1,7 @@
 package ru.ifmo.ctddev.shah.crawler;
 
 import info.kgeorgiy.java.advanced.crawler.Document;
+import info.kgeorgiy.java.advanced.crawler.Result;
 import javafx.util.Pair;
 
 import java.io.IOException;
@@ -18,7 +19,7 @@ class WebTask {
     private final Phaser phaser = new Phaser(1);
     private final ConcurrentMap<String, Pair<Document, Integer>> result = new ConcurrentHashMap<>();
 
-    private final AtomicReference<IOException> exceptionThread;
+    private final Map<String, IOException> errors;
 
 
     /**
@@ -26,21 +27,19 @@ class WebTask {
      */
     public WebTask(WebData webData) {
         this.webData = webData;
-        exceptionThread = new AtomicReference<>(null);
+        errors = new ConcurrentHashMap<>();
     }
 
     /**
      * Download all links from url by depth.
      * @return list of unique downloaded urls
      */
-    public List<String> download(String url, int maxDepth) throws IOException{
-        webData.dowloadLink(result, phaser, exceptionThread, url, maxDepth);
+    public Result download(String url, int maxDepth) {
+        webData.downloadLink(result, phaser, errors, url, maxDepth);
         phaser.arriveAndAwaitAdvance();
-        webData.removeDownloaded(result.keySet());
-//        if (exceptionThread.get() != null) {
-//            throw exceptionThread.get();
-//        }
-        return new ArrayList<>(result.keySet());
+        Set<String> urls = result.keySet();
+        urls.removeAll(errors.keySet());
+        return new Result(new ArrayList<>(urls), errors);
     }
 
 }

@@ -1,5 +1,7 @@
 package ru.ifmo.ctddev.shah.udp;
 
+import info.kgeorgiy.java.advanced.hello.HelloServer;
+
 import java.io.IOException;
 import java.net.*;
 import java.util.concurrent.*;
@@ -9,24 +11,41 @@ import java.util.concurrent.*;
  *
  * @author sultan
  */
-public class HelloUDPServer implements AutoCloseable {
-    private final DatagramSocket datagramSocket;
-    private final Integer threadsCount;
-    private final ExecutorService threadPool;
-    private final ExecutorService taskManager;
-    private final BlockingQueue<DatagramPacket> queue;
+public class HelloUDPServer implements HelloServer {
+    private DatagramSocket datagramSocket;
+    private Integer threadsCount;
+    private ExecutorService threadPool;
+    private ExecutorService taskManager;
+    private BlockingQueue<DatagramPacket> queue;
 
-    public HelloUDPServer(Integer port, Integer threadsCount) throws UnknownHostException, SocketException {
+    public static void printUsage() {
+        System.out.println("port threadsCount");
+    }
+
+    public static void main(String[] args) {
+        try ( HelloUDPServer server = new HelloUDPServer()) {
+            server.start(Integer.parseInt(args[0]), Integer.parseInt(args[1]));
+        }
+    }
+
+    @Override
+    public void start(int port, int threads) {
         System.err.println("SERVER");
-        this.datagramSocket = new DatagramSocket(port);
-        this.threadsCount = threadsCount;
-        this.threadPool = Executors.newFixedThreadPool(threadsCount);
+        System.err.println("PORT: " + port + " THREADS: " + threads);
+        try {
+            this.datagramSocket = new DatagramSocket(port);
+        } catch (SocketException e) {
+            System.err.println("Cannot create socket " + e.getMessage());
+            return;
+        }
+        this.threadsCount = threads;
+        this.threadPool = Executors.newFixedThreadPool(threads);
         this.taskManager = Executors.newSingleThreadExecutor();
-        queue = new LinkedBlockingQueue<>(threadsCount * 2);
+        queue = new LinkedBlockingQueue<>(threadsCount * 10);
         for (int i = 0; i < threadsCount; i++) {
             threadPool.submit(() -> {
                 try {
-                    while (true) {
+                    while (!Thread.currentThread().isInterrupted()) {
                         final DatagramPacket datagramPacket = queue.take();
                         String received = new String(datagramPacket.getData(), 0, datagramPacket.getLength());
                         received = "Hello, " + received;
@@ -38,47 +57,39 @@ public class HelloUDPServer implements AutoCloseable {
                             e.printStackTrace();
                         }
                     }
+                    Thread.currentThread().interrupt();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
             });
         }
-    }
-
-    private void start() {
         System.err.println("started");
-        while (true) {
-            try {
-                DatagramPacket datagramPacket = new DatagramPacket(new byte[1024], 1024);
-                datagramSocket.receive(datagramPacket);
-                System.err.println("Received");
-                if (queue.add(datagramPacket)) {
-                    System.err.println("Added");
+        taskManager.submit(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    DatagramPacket datagramPacket = new DatagramPacket(new byte[1024], 1024);
+                    datagramSocket.receive(datagramPacket);
+                    queue.offer(datagramPacket);
+                } catch (IOException e) {
+                    System.err.println("MY " + e.getMessage());
+//                    e.printStackTrace();
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
-        }
-    }
-
-    public static void printUsage() {
-        System.out.println("port threadsCount");
-    }
-
-    public static void main(String[] args) {
-        try ( HelloUDPServer server = new HelloUDPServer(Integer.parseInt(args[0]), Integer.parseInt(args[1]))) {
-            server.start();
-        } catch (UnknownHostException | SocketException e) {
-            printUsage();
-            e.printStackTrace();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+            Thread.currentThread().interrupt();
+        });
     }
 
     @Override
-    public void close() throws Exception {
-        threadPool.shutdownNow();
-        Thread.currentThread().interrupt();
+    public void close() {
+        if (threadPool != null) {
+            threadPool.shutdownNow();
+        }
+        taskManager.shutdownNow();
+        datagramSocket.close();
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

@@ -9,7 +9,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -18,6 +20,7 @@ import java.util.zip.GZIPInputStream;
 public class ReplayDownloader implements Downloader {
     private final ConcurrentMap<String, Page> pages;
     private final ConcurrentMap<String, Boolean> downloaded = new ConcurrentHashMap<>();
+    private final AtomicInteger errors = new AtomicInteger();
     private final int depth;
     private final int downloadDelay;
     private final int extractDelay;
@@ -57,11 +60,12 @@ public class ReplayDownloader implements Downloader {
             throw new AssertionError("Duplicate download of " + url);
         }
         if (downloaded.size() % 100 == 0) {
-            System.out.format("    %d of %d pages downloaded\n", downloaded.size(), pages.size());
+            System.out.format("    %d of %d pages downloaded, %d errors\n", downloaded.size(), pages.size(), errors.get());
         }
         sleep(downloadDelay);
-        if (page.links == null) {
-            throw new IOException("Error downloading " + url);
+        if (page.exception != null) {
+            errors.incrementAndGet();
+            throw page.exception;
         }
         return () -> {
             sleep(extractDelay);
@@ -77,20 +81,32 @@ public class ReplayDownloader implements Downloader {
         }
     }
 
-    public Set<String> expected(final int depth) {
+    public Result expected(final int depth) {
+        return new Result(
+                getEntryStream(depth)
+                        .filter(e -> e.getValue().exception == null)
+                        .map(Map.Entry::getKey)
+                        .collect(Collectors.toList()),
+                getEntryStream(depth)
+                        .filter(e -> e.getValue().exception != null)
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().exception))
+        );
+    }
+
+    private Stream<Map.Entry<String, Page>> getEntryStream(final int depth) {
         return pages.entrySet().stream()
-                .filter(e -> e.getValue().depth < depth)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
+        .filter(e -> e.getValue().depth < depth);
     }
 
     public static class Page implements Serializable {
         public final int depth;
         public final List<String> links;
+        public final IOException exception;
 
-        public Page(final int depth, final List<String> links) {
+        public Page(final int depth, final List<String> links, final IOException exception) {
             this.depth = depth;
             this.links = links;
+            this.exception = exception;
         }
     }
 }
