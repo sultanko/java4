@@ -1,11 +1,14 @@
 package ru.ifmo.ctddev.shah.crawler;
 
 import info.kgeorgiy.java.advanced.crawler.Crawler;
+import info.kgeorgiy.java.advanced.crawler.Document;
 import info.kgeorgiy.java.advanced.crawler.Downloader;
 import info.kgeorgiy.java.advanced.crawler.Result;
+import javafx.util.Pair;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.Phaser;
 
 /**
  * Created on 02.04.15.
@@ -34,8 +37,14 @@ public class WebCrawler implements Crawler {
      */
     @Override
     public Result download(String url, int depth) {
-        WebTask webTask = new WebTask(webData);
-        return webTask.download(url, depth);
+        final Phaser phaser = new Phaser(1);
+        final Map<String, Pair<Document, Integer>> result = new HashMap<>();
+        final Map<String, IOException> errors = new HashMap<>();
+        webData.downloadLink(result, phaser, errors, url, depth);
+        phaser.arriveAndAwaitAdvance();
+        Set<String> urls = result.keySet();
+        urls.removeAll(errors.keySet());
+        return new Result(new ArrayList<>(urls), errors);
     }
 
     /**

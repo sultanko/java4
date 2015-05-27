@@ -33,6 +33,7 @@ public class TaskQueue {
      * Retrieves and removes the head of this queue.
      *
      * @return the head of this queue.
+     * @throws InterruptedException  when thread is interrupted
      */
     public Task<?, ?> poll() throws InterruptedException {
         lock.lock();
@@ -75,6 +76,7 @@ public class TaskQueue {
      * @param <T> type of argument
      * @param <R> type of result
      * @return new Task added to TaskQueue
+     * @throws InterruptedException  when thread is interrupted
      */
     public <T, R> Task<T, R> push(final Function<? super T, ? extends  R> func, T arg) throws InterruptedException {
         lock.lock();

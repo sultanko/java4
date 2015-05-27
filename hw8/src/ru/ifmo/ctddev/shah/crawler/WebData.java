@@ -22,7 +22,7 @@ class WebData {
     private final int perHost;
     private final ExecutorService downloadThreads;
     private final ExecutorService extractorThreads;
-    public final ConcurrentMap<String, Pair<Integer,
+    private final Map<String, Pair<Integer,
             Queue<Runnable>>> hosts;
 
     public WebData(Downloader downloader, int downloaders, int extractors, int perHost) {
@@ -34,7 +34,7 @@ class WebData {
         this.extractorThreads = new ThreadPoolExecutor(extractors, extractors, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<>(), Executors.defaultThreadFactory(),
                 new ThreadPoolExecutor.CallerRunsPolicy());
-        hosts = new ConcurrentHashMap<>();
+        hosts = new HashMap<>();
     }
 
     /**
@@ -49,33 +49,44 @@ class WebData {
      * Download all links from given url by depth.
      * @param result map contains downloaded url and document for it
      * @param phaser {@link Phaser} for tasks count
-     * @param reference save exception while downloading
+     * @param errors save exception while downloading
      * @param url url to download
      * @param depth depth
      */
-    public void downloadLink(final ConcurrentMap<String, Pair<Document, Integer>> result, final Phaser phaser, final Map<String, IOException> reference,
-                             final String url, final Integer depth) {
+    public void  downloadLink(
+            final Map<String, Pair<Document, Integer>> result,
+            final Phaser phaser,
+            final Map<String, IOException> errors,
+            final String url, final Integer depth
+    ) {
         result.put(url, new Pair<>(null, depth));
-        addLinkToDownload(result, phaser, reference, url, depth);
+        addLinkToDownload(result, phaser, errors, url, depth);
     }
 
     private void checkNew(final String host) {
-        hosts.computeIfPresent(host, (key, oldValue) -> {
+        synchronized (hosts) {
+            final Pair<Integer, Queue<Runnable>> oldValue = hosts.get(host);
             Integer downloaders = oldValue.getKey() - 1;
             if (!oldValue.getValue().isEmpty()) {
+                // start new downloader if exist
                 downloadThreads.submit(oldValue.getValue().poll());
                 downloaders++;
             }
-            // remove unused url from HashMap
             if (downloaders == 0) {
-                return null;
+                // remove unused host from Map
+                hosts.remove(host);
+            } else {
+                hosts.replace(host, new Pair<>(downloaders, oldValue.getValue()));
             }
-            return new Pair<>(downloaders, oldValue.getValue());
-        });
+        }
     }
 
-    private void addLinkToDownload(final ConcurrentMap<String, Pair<Document, Integer>> result, final Phaser phaser, final Map<String, IOException> errors,
-                                  final String url, final Integer depth) {
+    private void addLinkToDownload(
+            final Map<String, Pair<Document, Integer>> result,
+            final Phaser phaser,
+            final Map<String, IOException> errors,
+            final String url, final Integer depth
+    ) {
         final String host;
         try {
             host = URLUtils.getHost(url);
@@ -87,7 +98,11 @@ class WebData {
         Runnable runnable = () -> {
             try {
                 final Document document = downloader.download(url);
-                final Pair<Document, Integer> now = result.replace(url, new Pair<>(document, depth));
+                final Pair<Document, Integer> now;
+                synchronized (result) {
+                    // get updated depth of url
+                    now = result.replace(url, new Pair<>(document, depth));
+                }
                 final Integer curDepth = now.getValue();
                 if (curDepth > 1) {
                     addLinkToExtract(result, phaser, errors, url, document, curDepth - 1);
@@ -99,46 +114,51 @@ class WebData {
                 phaser.arrive();
             }
         };
-        hosts.compute(host, (key, oldValue) -> {
+        synchronized (hosts) {
+            Pair<Integer, Queue<Runnable>> oldValue = hosts.get(host);
+            // if host hasn't downloaded before
+            // add it
             if (oldValue == null) {
                 downloadThreads.submit(runnable);
-                return new Pair<>(1, new LinkedList<>());
+                hosts.put(host, new Pair<>(1, new LinkedList<>()));
             } else {
                 final Integer hostDownloaders = oldValue.getKey();
                 if (hostDownloaders < perHost) {
                     downloadThreads.submit(runnable);
-                    return new Pair<>(hostDownloaders + 1, oldValue.getValue());
+                    hosts.replace(host, new Pair<>(hostDownloaders + 1, oldValue.getValue()));
                 } else {
+                    // WebCrawler now downloading in maximum threads from this host
+                    // therefore save this url for better time
                     oldValue.getValue().add(runnable);
                 }
-                return oldValue;
             }
-        });
+        }
     }
 
-    private void addLinkToExtract(final ConcurrentMap<String, Pair<Document, Integer>> result, final Phaser phaser, final Map<String, IOException> errors,
-                                 final String url, final Document document, final Integer urlDepth) {
+    private void addLinkToExtract(final Map<String, Pair<Document, Integer>> result,
+                                  final Phaser phaser,
+                                  final Map<String, IOException> errors,
+                                  final String url, final Document document, final Integer urlDepth) {
         phaser.register();
         extractorThreads.submit(() -> {
             try {
                 final List<String> links = document.extractLinks();
                 for (String extractedLink : links) {
-                    result.compute(extractedLink, (key, oldValue) -> {
+                    synchronized (result) {
+                        final Pair<Document, Integer> oldValue = result.get(extractedLink);
                         if (oldValue == null) {
+                            // url hasn't added before => download it
                             addLinkToDownload(result, phaser, errors, extractedLink, urlDepth);
-                            return new Pair<>(null, urlDepth);
-                        }
-                        // oldValue.getValue() - previous depth of extractedLink
-                        if (oldValue.getValue() < urlDepth) {
+                            result.put(extractedLink, new Pair<>(null, urlDepth));
+                        } else if (oldValue.getValue() < urlDepth) {
                             final Document downloadedDocument = oldValue.getKey();
                             if (downloadedDocument != null) {
+                                // url has downloaded earlier => extract links from downloaded document
                                 addLinkToExtract(result, phaser, errors, extractedLink, downloadedDocument, urlDepth);
-                            } else {
-                                return new Pair<>(null, urlDepth);
                             }
+                            result.replace(extractedLink, new Pair<>(downloadedDocument, urlDepth));
                         }
-                        return oldValue;
-                    });
+                    }
                 }
             } catch (IOException e) {
                 errors.put(url, e);

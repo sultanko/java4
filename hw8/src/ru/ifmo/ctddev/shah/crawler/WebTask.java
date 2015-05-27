@@ -17,9 +17,8 @@ import java.util.concurrent.atomic.AtomicReference;
 class WebTask {
     private final WebData webData;
     private final Phaser phaser = new Phaser(1);
-    private final ConcurrentMap<String, Pair<Document, Integer>> result = new ConcurrentHashMap<>();
-
-    private final Map<String, IOException> errors;
+    private final Map<String, Pair<Document, Integer>> result = new HashMap<>();
+    private final Map<String, IOException> errors = new HashMap<>();
 
 
     /**
@@ -27,7 +26,6 @@ class WebTask {
      */
     public WebTask(WebData webData) {
         this.webData = webData;
-        errors = new ConcurrentHashMap<>();
     }
 
     /**
